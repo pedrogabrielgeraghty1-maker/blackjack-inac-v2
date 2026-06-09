@@ -1,325 +1,215 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Blackjack INAC',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const BlackjackInacScreen(),
+      title: 'Blackjack INAC Pro',
+      theme: ThemeData(primarySwatch: Colors.green, brightness: Brightness.dark),
+      home: const BlackjackGame(),
     );
   }
 }
 
-class BlackjackInacScreen extends StatefulWidget {
-  const BlackjackInacScreen({super.key});
+class BlackjackGame extends StatefulWidget {
+  const BlackjackGame({Key? key}) : super(key: key);
 
   @override
-  State<BlackjackInacScreen> createState() => _BlackjackInacScreenState();
+  State<BlackjackGame> createState() => _BlackjackGameState();
 }
 
-class _BlackjackInacScreenState extends State<BlackjackInacScreen> {
-  int saldo = 1000;
-  int apuestaActual = 0;
-  bool apuestaConfirmada = false;
+class _BlackjackGameState extends State<BlackjackGame> {
+  // VARIABLES DE ESTADO REALES
+  String pantallaActual = 'MENU'; // MENU, APUESTA, JUEGO, FIN
+  int credits = 1000;
+  int bet = 0;
+  List<int> playerValues = [];
+  List<int> dealerValues = [];
+  String resultMessage = '';
   bool juegoTerminado = false;
-  int puntosJugador = 15;
-  int puntosDealer = 10;
-  int premioRecibido = 0;
 
-  void agregarFicha(int valor) {
-    if (apuestaConfirmada) return;
-    if (saldo >= valor && (apuestaActual + valor) <= 1000) {
-      setState(() {
-        apuestaActual += valor;
-        saldo -= valor;
-      });
+  // RUTAS DE IMÁGENES SEGURAS
+  static const String assetBase = '/assets/images/';
+  final String fondoHangar = assetBase + 'hangar.png'; 
+  final String cardBack = assetBase + 'carta_tapada.png';
+
+  // Mapeo para simular cartas reales (As, cartas numéricas, y figuras)
+  final List<int> mazo = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+
+  int calcularPuntos(List<int> mano) {
+    int total = mano.fold(0, (sum, item) => sum + item);
+    int aces = mano.where((v) => v == 11).length;
+    while (total > 21 && aces > 0) {
+      total -= 10;
+      aces--;
     }
+    return total;
   }
 
-  void deshacerApuesta() {
-    if (apuestaConfirmada) return;
+  void iniciarApuesta() => setState(() => pantallaActual = 'APUESTA');
+
+  void comenzarJuego(int cantidadApostada) {
+    if (cantidadApostada > credits) return;
     setState(() {
-      saldo += apuestaActual;
-      apuestaActual = 0;
+      bet = cantidadApostada;
+      credits -= cantidadApostada;
+      juegoTerminado = false;
+      
+      // Repartir cartas iniciales (valores numéricos aleatorios)
+      playerValues = [_sacarCarta(), _sacarCarta()];
+      dealerValues = [_sacarCarta(), _sacarCarta()];
+      
+      pantallaActual = 'JUEGO';
+      
+      if (calcularPuntos(playerValues) == 21) {
+        evaluarGanador();
+      }
     });
   }
 
-  void confirmarApuesta() {
-    if (apuestaActual >= 10) {
-      setState(() {
-        apuestaConfirmada = true;
-        juegoTerminado = false;
-      });
+  int _sacarCarta() {
+    final random = Random();
+    return mazo[random.nextInt(mazo.length)];
+  }
+
+  // BOTÓN PEDIR
+  void playerHit() {
+    if (juegoTerminado) return;
+    setState(() {
+      playerValues.add(_sacarCarta());
+      if (calcularPuntos(playerValues) > 21) {
+        juegoTerminado = true;
+        pantallaActual = 'FIN';
+        resultMessage = '¡Te pasaste! Perdiste \$$bet';
+      }
+    });
+  }
+
+  // BOTÓN REDOBLAR (Double Down)
+  void playerDoubleDown() {
+    if (juegoTerminado || credits < bet) return;
+    setState(() {
+      credits -= bet; // Restamos la misma cantidad otra vez
+      bet *= 2;       // Duplicamos la apuesta
+      playerValues.add(_sacarCarta()); // Recibe una Sola carta más
+      juegoTerminado = true;
+      
+      if (calcularPuntos(playerValues) > 21) {
+        pantallaActual = 'FIN';
+        resultMessage = '¡Te pasaste al redoblar! Perdiste \$$bet';
+      } else {
+        _turnoDeLaBanca();
+      }
+    });
+  }
+
+  // BOTÓN PLANTARSE
+  void playerStand() {
+    if (juegoTerminado) return;
+    _turnoDeLaBanca();
+  }
+
+  void _turnoDeLaBanca() {
+    setState(() {
+      juegoTerminado = true;
+      // La banca pide carta obligao hasta tener 17 o más
+      while (calcularPuntos(dealerValues) < 17) {
+        dealerValues.add(_sacarCarta());
+      }
+      evaluarGanador();
+    });
+  }
+
+  void evaluarGanador() {
+    int puntosJugador = calcularPuntos(playerValues);
+    int puntosBanca = calcularPuntos(dealerValues);
+
+    setState(() {
+      pantallaActual = 'FIN';
+      if (puntosJugador > 21) {
+        resultMessage = 'Perdiste \$$bet';
+      } else if (puntosBanca > 21) {
+        resultMessage = '¡La banca se pasó! Ganaste \$$bet';
+        credits += bet * 2;
+      } else if (puntosJugador > puntosBanca) {
+        resultMessage = '¡Ganaste! +\$$bet';
+        credits += bet * 2;
+      } else if (puntosJugador < puntosBanca) {
+        resultMessage = 'Perdiste \$$bet';
+      } else {
+        resultMessage = 'Empate (Devolución)';
+        credits += bet;
+      }
+    });
+  }
+
+  void reiniciarJuego() => setState(() { pantallaActual = 'MENU'; bet = 0; playerValues.clear(); dealerValues.clear(); });
+
+  // TRADUCTOR DE VALOR A NOMBRE DE ARCHIVO PNG
+  String _obtenerRutaCarta(int valor, bool esBanca, int indice) {
+    if (esBanca && !juegoTerminado && indice == 0) {
+      return cardBack; // Muestra carta tapada si la banca no jugó
     }
+    // Mapeo simple de tus nombres de archivos según el valor extraído
+    if (valor == 11 || valor == 1) return assetBase + 'as_espadas.png';
+    if (valor == 10) return assetBase + 'rey_basto.png';
+    return assetBase + 'cinco_oro.png'; // Comodín para valores chicos
+  }
+
+  ButtonStyle proButtonStyle() => ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF0D47A1),
+    foregroundColor: Colors.white,
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
+
+  Widget safeImage(String path, {double height = 110}) {
+    return Image.asset(
+      path,
+      height: height,
+      errorBuilder: (context, error, stackTrace) {
+        return Card(
+          color: Colors.grey.shade900,
+          child: SizedBox(
+            height: height,
+            width: height * 0.7,
+            child: const Center(
+              child: Text('🃏', style: TextStyle(fontSize: 24)),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A1128),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF050B1A), Color(0xFF101F42)],
-          ),
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          image: DecorationImage(image: AssetImage(fondoHangar), fit: BoxFit.cover),
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Encabezado: Logo y Saldo
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.style, color: Colors.red, size: 30),
-                        SizedBox(width: 8),
-                        Text(
-                          'BLACKJACK',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF162A54),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.blueAccent.withOpacity(0.5)),
-                      ),
-                      child: Text(
-                        '\$$saldo',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                  ],
+        child: Container(
+          color: Colors.black.withOpacity(0.55),
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: _construirPantalla(),
                 ),
               ),
-
-              const Spacer(),
-
-              // Zona Central Dinámica (Cambia según el estado del juego)
-              if (!apuestaConfirmada) ...[
-                // PANTALLA 1: HAZ TU APUESTA
-                const Text(
-                  '═ HAZ TU APUESTA ═',
-                  style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 16),
-                // Fichas de apuestas
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.reply, color: Colors.grey),
-                      onPressed: deshacerApuesta,
-                    ),
-                    _buildFicha(1, Colors.grey.shade300, Colors.black),
-                    _buildFicha(5, Colors.red, Colors.white),
-                    _buildFicha(10, Colors.blue, Colors.white),
-                    _buildFicha(20, Colors.yellow.shade700, Colors.black),
-                    _buildFicha(25, Colors.green, Colors.white),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '\$$apuestaActual',
-                  style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  'Mínimo: \$10 | Máximo: \$1,000',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
-                    padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: confirmarApuesta,
-                  child: const Text('LISTO', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-                const Spacer(),
-                // Fondo de Hangar (.png)
-                Container(
-                  height: 200,
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    image: const DecorationImage(
-                      image: AssetImage('assets/images/hangar_bg.png'),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ] else if (apuestaConfirmada && !juegoTerminado) ...[
-                // PANTALLA 2: TU DECISIÓN
-                const Text(
-                  'BLACKJACK PAYS 3 TO 2\nDealer must draw to 16 and stand on all 17s',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.5),
-                ),
-                const Spacer(),
-                const Text(
-                  'TU DECISIÓN',
-                  style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                // Botones de acción
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildBotonAccion(Icons.lightbulb_outline, 'ESTRATEGIA'),
-                    _buildBotonAccion(Icons.looks_two, 'DOBLAR'),
-                    _buildBotonAccion(Icons.add_circle_outline, 'PEDIR'),
-                    _buildBotonAccion(Icons.stop_circle_outlined, 'PLANTARSE'),
-                    _buildBotonAccion(Icons.flag_outlined, 'RENDIRSE'),
-                  ],
-                ),
-                const Spacer(),
-                // Cartas en juego y Avión de fondo (.png)
-                Container(
-                  height: 220,
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-                      image: AssetImage('assets/images/airplane_sky.png'),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Positioned(
-                        bottom: 40,
-                        child: Row(
-                          children: [
-                            _buildCarta('Q', 'S'),
-                            const SizedBox(width: 8),
-                            _buildCarta('5', 'D'),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(10)),
-                          child: Text('$puntosJugador', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                // PANTALLA 3: RESULTADO FINAL (PERDIÓ / GANÓ)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Column(
-                      children: [
-                        _buildCarta('K', 'H'),
-                        _buildCarta('9', 'H'),
-                        Container(
-                          margin: const EdgeInsets.only(top: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                          child: const Text('PIERDE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          const Text('HAS RECIBIDO:', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                          Text('\$$premioRecibido', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                          Text('Tu apuesta total: \$$apuestaActual', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                          const SizedBox(height: 16),
-                          const Text('Toca en cualquier parte\npara continuar...', textAlign: TextAlign.center, style: TextStyle(color: Colors.blueAccent, fontSize: 11)),
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-                const Spacer(),
-              ],
-
-              const Spacer(),
-
-              // Footer Institucional INAC CIATA
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                width: double.infinity,
-                color: Colors.black.withOpacity(0.4),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'INAC CIATA',
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Icon(Icons.flight_takeoff, color: Colors.grey, size: 16),
-                    ),
-                    Text(
-                      'VOLAR ES NUESTRO DESTINO',
-                      style: TextStyle(color: Colors.grey, fontSize: 11, letterSpacing: 1),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFicha(int valor, Color fondo, Color texto) {
-    return GestureDetector(
-      onTap: () => agregarFicha(valor),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: CircleAvatar(
-          radius: 20,
-          backgroundColor: fondo,
-          child: CircleAvatar(
-            radius: 17,
-            backgroundColor: fondo,
-            child: Text(
-              '$valor',
-              style: TextStyle(color: texto, fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ),
@@ -327,38 +217,116 @@ class _BlackjackInacScreenState extends State<BlackjackInacScreen> {
     );
   }
 
-  Widget _buildBotonAccion(IconData icono, String etiqueta) {
+  Widget _construirPantalla() {
+    switch (pantallaActual) {
+      case 'MENU': return _pantallaMenu();
+      case 'APUESTA': return _pantallaApuesta();
+      case 'JUEGO': return _pantallaJuego();
+      case 'FIN': return _pantallaFin();
+      default: return _pantallaMenu();
+    }
+  }
+
+  Widget _pantallaMenu() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        CircleAvatar(
-          radius: 22,
-          backgroundColor: const Color(0xFF1E293B),
-          child: Icon(icono, color: Colors.white, size: 20),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          etiqueta,
-          style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w500),
+        const Text('BLACKJACK INAC', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        const Text('Simulador de Vuelo v2', style: TextStyle(fontSize: 16, color: Colors.blueAccent)),
+        const SizedBox(height: 50),
+        ElevatedButton(onPressed: iniciarApuesta, style: proButtonStyle(), child: const Text('INGRESAR AL HANGAR')),
+      ],
+    );
+  }
+
+  Widget _pantallaApuesta() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('CRÉDITOS: \$$credits', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 30),
+        const Text('CANTIDAD A APOSTAR', style: TextStyle(fontSize: 18, color: Colors.white70)),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(onPressed: credits >= 100 ? () => comenzarJuego(100) : null, style: proButtonStyle(), child: const Text('\$100')),
+            const SizedBox(width: 15),
+            ElevatedButton(onPressed: credits >= 500 ? () => comenzarJuego(500) : null, style: proButtonStyle(), child: const Text('\$500')),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildCarta(String valor, String palo) {
-    return Container(
-      width: 60,
-      height: 90,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4)],
-      ),
-      child: Center(
-        child: Text(
-          valor,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
+  Widget _pantallaJuego() {
+    int pJugador = calcularPuntos(playerValues);
+    int pBanca = juegoTerminado ? calcularPuntos(dealerValues) : calcularPuntos([dealerValues[1]]);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('APUESTA EN CURSO: \$$bet', style: const TextStyle(fontSize: 20, color: Colors.yellowAccent, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        
+        // BANCA
+        Text('BANCA (Puntos: $pBanca)', style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: dealerValues.asMap().entries.map((entry) {
+            return safeImage(_obtenerRutaCarta(entry.value, true, entry.key));
+          }).toList(),
         ),
-      ),
+        
+        const SizedBox(height: 30),
+        
+        // JUGADOR
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: playerValues.asMap().entries.map((entry) {
+            return safeImage(_obtenerRutaCarta(entry.value, false, entry.key));
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        Text('TU MANO (Puntos: $pJugador)', style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
+        
+        const SizedBox(height: 40),
+
+        // PANEL DE ACCIONES AJUSTADO
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          alignment: WrapAlignment.center,
+          children: [
+            ElevatedButton(onPressed: playerHit, style: proButtonStyle(), child: const Text('PEDIR')),
+            ElevatedButton(
+              onPressed: (credits >= bet) ? playerDoubleDown : null, 
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white), 
+              child: const Text('REDOBLAR'),
+            ),
+            ElevatedButton(onPressed: playerStand, style: proButtonStyle(), child: const Text('PLANTARSE')),
+            ElevatedButton(
+              onPressed: reiniciarJuego, 
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, foregroundColor: Colors.white), 
+              child: const Text('RETIRARSE'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _pantallaFin() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(resultMessage, style: const TextStyle(fontSize: 32, color: Colors.yellowAccent, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+        const SizedBox(height: 15),
+        Text('Mano Jugador: ${calcularPuntos(playerValues)} vs Banca: ${calcularPuntos(dealerValues)}', style: const TextStyle(fontSize: 16, color: Colors.white60)),
+        const SizedBox(height: 40),
+        ElevatedButton(onPressed: reiniciarJuego, style: proButtonStyle(), child: const Text('VOLVER AL MENU')),
+      ],
     );
   }
 }
