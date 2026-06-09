@@ -36,12 +36,12 @@ class _BlackjackGameState extends State<BlackjackGame> {
   String resultMessage = '';
   bool juegoTerminado = false;
 
-  // RUTAS DE IMÁGENES SEGURAS
-  static const String assetBase = '/assets/images/';
+  // RUTAS DE IMÁGENES SEGURAS (Sin barra inicial para web)
+  static const String assetBase = 'assets/images/';
   final String fondoHangar = assetBase + 'hangar.png'; 
   final String cardBack = assetBase + 'carta_tapada.png';
 
-  // Mapeo para simular cartas reales (As, cartas numéricas, y figuras)
+  // Mapeo para simular cartas reales
   final List<int> mazo = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
 
   int calcularPuntos(List<int> mano) {
@@ -63,7 +63,6 @@ class _BlackjackGameState extends State<BlackjackGame> {
       credits -= cantidadApostada;
       juegoTerminado = false;
       
-      // Repartir cartas iniciales (valores numéricos aleatorios)
       playerValues = [_sacarCarta(), _sacarCarta()];
       dealerValues = [_sacarCarta(), _sacarCarta()];
       
@@ -80,7 +79,6 @@ class _BlackjackGameState extends State<BlackjackGame> {
     return mazo[random.nextInt(mazo.length)];
   }
 
-  // BOTÓN PEDIR
   void playerHit() {
     if (juegoTerminado) return;
     setState(() {
@@ -93,13 +91,12 @@ class _BlackjackGameState extends State<BlackjackGame> {
     });
   }
 
-  // BOTÓN REDOBLAR (Double Down)
   void playerDoubleDown() {
     if (juegoTerminado || credits < bet) return;
     setState(() {
-      credits -= bet; // Restamos la misma cantidad otra vez
-      bet *= 2;       // Duplicamos la apuesta
-      playerValues.add(_sacarCarta()); // Recibe una Sola carta más
+      credits -= bet;
+      bet *= 2;
+      playerValues.add(_sacarCarta());
       juegoTerminado = true;
       
       if (calcularPuntos(playerValues) > 21) {
@@ -111,7 +108,6 @@ class _BlackjackGameState extends State<BlackjackGame> {
     });
   }
 
-  // BOTÓN PLANTARSE
   void playerStand() {
     if (juegoTerminado) return;
     _turnoDeLaBanca();
@@ -120,7 +116,6 @@ class _BlackjackGameState extends State<BlackjackGame> {
   void _turnoDeLaBanca() {
     setState(() {
       juegoTerminado = true;
-      // La banca pide carta obligao hasta tener 17 o más
       while (calcularPuntos(dealerValues) < 17) {
         dealerValues.add(_sacarCarta());
       }
@@ -151,17 +146,15 @@ class _BlackjackGameState extends State<BlackjackGame> {
     });
   }
 
-  void reiniciarJuego() => setState(() { pantallaActual = 'MENU'; bet = 0; playerValues.clear(); dealerValues.clear(); });
+  void reiniciarJuego() => setState(() { pantallaActual = 'MENU'; credits = 1000; bet = 0; playerValues.clear(); dealerValues.clear(); });
 
-  // TRADUCTOR DE VALOR A NOMBRE DE ARCHIVO PNG
   String _obtenerRutaCarta(int valor, bool esBanca, int indice) {
     if (esBanca && !juegoTerminado && indice == 0) {
-      return cardBack; // Muestra carta tapada si la banca no jugó
+      return cardBack;
     }
-    // Mapeo simple de tus nombres de archivos según el valor extraído
     if (valor == 11 || valor == 1) return assetBase + 'as_espadas.png';
     if (valor == 10) return assetBase + 'rey_basto.png';
-    return assetBase + 'cinco_oro.png'; // Comodín para valores chicos
+    return assetBase + 'cinco_oro.png';
   }
 
   ButtonStyle proButtonStyle() => ElevatedButton.styleFrom(
@@ -201,7 +194,7 @@ class _BlackjackGameState extends State<BlackjackGame> {
           image: DecorationImage(image: AssetImage(fondoHangar), fit: BoxFit.cover),
         ),
         child: Container(
-          color: Colors.black.withOpacity(0.55),
+          color: Colors.black.withOpacity(0.45), // Menos oscuro para ver el hangar
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -234,12 +227,30 @@ class _BlackjackGameState extends State<BlackjackGame> {
         const Text('BLACKJACK INAC', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 2)),
         const Text('Simulador de Vuelo v2', style: TextStyle(fontSize: 16, color: Colors.blueAccent)),
         const SizedBox(height: 50),
-        ElevatedButton(onPressed: iniciarApuesta, style: proButtonStyle(), child: const Text('INGRESAR AL HANGAR')),
+        ElevatedButton(onPressed: iniciarApuesta, style: proButtonStyle(), child: const Text('INICIAR SIMULADOR')),
       ],
     );
   }
 
   Widget _pantallaApuesta() {
+    // Si te quedas sin plata, mostramos pantalla de quiebra y reinicio
+    if (credits < 100) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('FONDOS INSUFICIENTES', style: TextStyle(fontSize: 26, color: Colors.red, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          const Text('Te has quedado sin créditos en la cuenta.', style: TextStyle(fontSize: 16, color: Colors.white70)),
+          const SizedBox(height: 40),
+          ElevatedButton(
+            onPressed: reiniciarJuego, 
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, foregroundColor: Colors.white), 
+            child: const Text('REINICIAR SIMULACIÓN'),
+          ),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -293,7 +304,6 @@ class _BlackjackGameState extends State<BlackjackGame> {
         
         const SizedBox(height: 40),
 
-        // PANEL DE ACCIONES AJUSTADO
         Wrap(
           spacing: 10,
           runSpacing: 10,
